@@ -134,13 +134,11 @@ class LogGPT(object):
                 break
             print(f'Episode {episode} loss: {current_episode_loss.item()}')
 
-            self.FT_GPT._predict_topk(self.test_df['EventSequence'].tolist()[::1], self.test_df['Label'].tolist()[::1])
-
+       	self.FT_GPT._predict_topk(self.test_df['EventSequence'].tolist()[::1], self.test_df['Label'].tolist()[::1])
 
     def test(self):
-        self.FT_GPT._load('FT')
-        self.FT_GPT._predict_topk(self.test_df['EventSequence'].tolist()[::1],
-                                    self.test_df['Label'].tolist()[::1])
+       	self.FT_GPT._predict_topk(self.test_df['EventSequence'].tolist()[::1], self.test_df['Label'].tolist()[::1])
+
 
     def valid_step(self, seq):
         # 1. generate samples by FT_GPT

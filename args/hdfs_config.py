@@ -48,9 +48,9 @@ def get_args():
     parser.add_argument('--output_dir', default='./datasets/', type=str,
                         help='The output directory of parsing results')
     parser.add_argument('--seed', default=7, type=int, help='random seed (default: 7)')
-    parser.add_argument('--device', default='cuda:0', type=str, help='device (default: cuda:0)')
-    parser.add_argument('--download_datasets', default=True, type=bool, help='Download datasets (default: True)')
-    parser.add_argument('--preprocessing', default=True, type=bool, help='Preprocessing datasets (default: True)')
+    parser.add_argument('--device', default='cpu', type=str, help='device (default: cpu)')
+    parser.add_argument('--download_datasets', default=False, type=bool, help='Download datasets (default: True)')
+    parser.add_argument('--preprocessing', default=False, type=bool, help='Preprocessing datasets (default: True)')
     parser.add_argument('--max_lens', default=512, type=int, help='Max length of sequence (default: 512)')
     parser.add_argument('--sliding_window', default=False, type=bool, help='Sliding window (default: False)')
 

@@ -32,7 +32,8 @@ class InitGPT(nn.Module):
         else:
             self.top_k = min(int((len(self.vocab)-5)*0.95), options['top_k'])
         self._init_training()
-        self._predict_topk(self.test_df['EventSequence'].tolist()[::1], self.test_df['Label'].tolist()[::1])
+       	sample_df = self.test_df.groupby('Label', group_keys=False).head(500)
+       	self._predict_topk(sample_df['EventSequence'].tolist(), sample_df['Label'].tolist())
 
     def _build_vocab(self):
         # Build vocab
@@ -131,6 +132,13 @@ class InitGPT(nn.Module):
         y_true = []
         y_pred = []
         print('Predicting with topk...')
+
+        combined = list(zip(seqs, label))
+        normal = [x for x in combined if x[1] == 0][:800]
+        anomaly = [x for x in combined if x[1] == 1][:800]
+        sample = normal + anomaly
+        seqs = [x[0] for x in sample]
+        label = [x[1] for x in sample]
         for ind, seq in enumerate(tqdm(seqs, desc='Predicting with topk:', disable=not self.tqdm)):
             y_true.append(label[ind])
             seq_ids = self.vocab.forward(seq)
