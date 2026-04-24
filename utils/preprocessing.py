@@ -137,8 +137,8 @@ def parsing(dataset_name, output_dir='./datasets/'):
             os.remove(downloaded_filename)
         except OSError:
             pass
-
         count = 0
+
         with open('OpenStack.log', mode='w') as outfile:
             for i in os.listdir('./OpenStack'):
                 if i != 'abnormal_labels.txt':
@@ -161,6 +161,42 @@ def parsing(dataset_name, output_dir='./datasets/'):
             shutil.move('./OpenStack/anomaly_labels.txt', './datasets/OpenStack_anomaly_labels.txt')
             os.remove(log_file)
             shutil.rmtree('./OpenStack')
+        except OSError:
+            pass
+
+
+    elif dataset_name == 'Linux':
+        url = 'https://zenodo.org/records/3227177/files/Linux.tar.gz?download=1'
+        downloaded_filename = 'Linux.tar.gz'
+        urllib.request.urlretrieve(url, downloaded_filename)
+        tar = tarfile.open(downloaded_filename, "r|gz")
+        tar.extractall()
+        tar.close()
+        try:
+            os.remove(downloaded_filename)
+        except OSError:
+            pass
+
+        input_dir = ''  # The input directory of log file
+        log_file = 'Linux.log'  # The input log file name
+        log_format = '<Month> <Day> <Time> <Host> <Component>(\[<PID>\]): <Content>'  # Linux log format
+        regex = [
+        r'(\d+\.){3}\d+',                         # IPv4 addresses
+        r'[A-Za-z0-9.-]+\.[A-Za-z]{2,}',          # hostnames/domains
+        r'(?<=uid=)\d+',                          # uid values
+        r'(?<=euid=)\d+',                         # euid values
+        r'(?<=port )\d+',                         # SSH ports
+        r'(?<=pid=)\d+',                          # pid values in content
+        r'(?<=rhost=)[^\s]+',                     # rhost values
+        r'(?<=user=)[^\s]+',                      # user values
+        r'(?<=[^A-Za-z0-9])\d+(?=[^A-Za-z0-9])',  # standalone numbers
+        ]
+        st = 0.5  # Similarity threshold
+        depth = 4  # Depth of all leaf nodes
+        parser = drain.LogParser(log_format, indir=input_dir, outdir=output_dir, depth=depth, st=st, rex=regex)
+        parser.parse(log_file)
+        try:
+            os.remove(log_file)
         except OSError:
             pass
 

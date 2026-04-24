@@ -4,7 +4,7 @@
 #
 
 from utils import preprocessing, utils
-from args import hdfs_config, thunderbird_config, bgl_config
+from args import hdfs_config, thunderbird_config, bgl_config, linux_config
 import os
 import sys
 from model import initGPT, logGPT
@@ -22,6 +22,8 @@ def main():
             parser = bgl_config.get_args()
         elif sys.argv[1] == 'HDFS':
             parser = hdfs_config.get_args()
+        elif sys.argv[1] == 'Linux':
+            parser = linux_config.get_args()
         else:
             print("Only support HDFS, Thunderbird and BGL dataset!")
             return 1

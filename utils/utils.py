@@ -21,6 +21,74 @@ def set_seed(seed = 42):
     torch.cuda.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
 
+
+
+def linux_rule_based_labeling(df):
+    """
+    Add weak anomaly labels for Linux logs.
+    Label = 1 means suspicious/anomalous.
+    Label = 0 means normal/benign.
+    """
+    df = df.copy()
+    df['Label'] = 0
+
+    content = df['Content'].astype(str).str.lower()
+    component = df['Component'].astype(str).str.lower()
+
+    suspicious_patterns = [
+        'authentication failure',
+        'user unknown',
+        'invalid user',
+        'failed password',
+        'maximum authentication attempts exceeded',
+        'not in sudoers',
+        'authentication token manipulation error',
+        'connection closed by invalid user',
+    ]
+
+    for pattern in suspicious_patterns:
+        df.loc[content.str.contains(pattern, regex=False, na=False), 'Label'] = 1
+
+    # Root-targeted failures
+    root_auth_fail = (
+        content.str.contains('authentication failure', regex=False, na=False)
+        & content.str.contains('user=root', regex=False, na=False)
+    )
+    df.loc[root_auth_fail, 'Label'] = 1
+
+    # FTP burst behavior: many ftpd connections from same IP in short time
+    df['SourceIP'] = content.str.extract(
+        r'connection from ((?:\d{1,3}\.){3}\d{1,3})',
+        expand=False
+    )
+
+    df['datatime_tmp'] = pd.to_datetime(
+        df['Month'].astype(str) + ' ' + df['Day'].astype(str) + ' ' + df['Time'].astype(str),
+        format='%b %d %H:%M:%S',
+        errors='coerce'
+    ).ffill()
+
+    ftpd_mask = component.str.contains('ftpd', regex=False, na=False) & df['SourceIP'].notna()
+
+    for ip, group in df[ftpd_mask].groupby('SourceIP'):
+        group = group.sort_values('datatime_tmp')
+
+        for idx, row in group.iterrows():
+            start = row['datatime_tmp']
+            end = start + pd.Timedelta(seconds=60)
+
+            burst = group[
+                (group['datatime_tmp'] >= start)
+                & (group['datatime_tmp'] <= end)
+            ]
+
+            if len(burst) >= 10:
+                df.loc[burst.index, 'Label'] = 1
+
+    df = df.drop(columns=['SourceIP', 'datatime_tmp'])
+
+    return df
+
 def hdfs_blk_process(df, blk_label_dict):
     data_dict = defaultdict(list)
     for idx, row in tqdm(df.iterrows()):
@@ -46,6 +114,13 @@ def sliding_window(df, options):
         df['datatime'] = pd.to_datetime(df['Date'] + ' ' + df['Time'], format='%Y-%m-%d %H:%M:%S')
     if options['dataset_name'] == 'OpenStack':
         df['datatime'] = pd.to_datetime(df['Time'] + ' ' + df['Pid'], format='%Y-%m-%d %H:%M:%S.%f', errors='coerce')
+        df['datatime'] = df['datatime'].fillna(method='ffill')
+    if options['dataset_name'] == 'Linux':
+        df['datatime'] = pd.to_datetime(
+            df['Month'].astype(str) + ' ' + df['Day'].astype(str) + ' ' + df['Time'].astype(str),
+            format='%b %d %H:%M:%S',
+            errors='coerce'
+        )
         df['datatime'] = df['datatime'].fillna(method='ffill')
     df['timestamp'] = df['datatime'].values.astype(np.int64) // 10 ** 9
     df = df.sort_values('timestamp')
@@ -84,7 +159,25 @@ def sliding_window(df, options):
 
 def preprocessing(preprocessing=True, dataset_name='HDFS', options=None):
     if preprocessing:
-        if dataset_name == 'HDFS':
+
+        if dataset_name == 'Linux':
+            print("Preprocessing Linux dataset")
+            df = pd.read_csv('./datasets/Linux.log_structured.csv', engine='c', na_filter=False, memory_map=True)
+            df = linux_rule_based_labeling(df)
+
+            print(df['Label'].value_counts())
+            print('There are %d instances in this dataset\n' % len(df))
+
+            new_df = sliding_window(df, options)
+            new_df.to_csv('./datasets/Linux.W{}.S{}.csv'.format(
+                options['window_size'],
+                options['step_size']
+            ))
+
+            del new_df
+
+
+        elif dataset_name == 'HDFS':
             print("Preprocessing HDFS dataset")
             df = pd.read_csv('./datasets/HDFS.log_structured.csv', engine='c', na_filter=False, memory_map=True)
             blk_df = pd.read_csv('./datasets/anomaly_label.csv', engine='c', na_filter=False, memory_map=True)
@@ -140,8 +233,43 @@ def preprocessing(preprocessing=True, dataset_name='HDFS', options=None):
             del new_df
 
 def train_test_split(dataset_name='HDFS', train_samples=5000, seed=42, options=None, dir='.'):
-    if dataset_name == 'HDFS':
-        hdfs_df = pd.read_csv(dir + '/datasets/HDFS.BLK.csv', index_col=0, dtype={'BlickId': str, 'Label':int})
+    if dataset_name == 'Linux':
+        df = pd.read_csv(
+            dir + '/datasets/Linux.W{}.S{}.csv'.format(options['window_size'], options['step_size']),
+            index_col=0,
+            dtype={'Label': int}
+        )
+
+        df.EventSequence = df.EventSequence.apply(literal_eval)
+
+        normal_df = df[df['Label'] == 0]
+        normal_df = normal_df.sample(frac=1, random_state=seed).reset_index(drop=True)
+
+        anomaly_df = df[df['Label'] == 1]
+
+        effective_train_samples = min(train_samples, max(len(normal_df) - 1, 0))
+
+        train_df = normal_df[:effective_train_samples]
+        test_df = pd.concat([normal_df[effective_train_samples:], anomaly_df], ignore_index=True)
+
+        train_df.to_csv(
+            dir + '/datasets/Linux.W{}.S{}.train.csv'.format(options['window_size'], options['step_size'])
+        )
+        test_df.to_csv(
+            dir + '/datasets/Linux.W{}.S{}.test.csv'.format(options['window_size'], options['step_size'])
+        )
+
+        print(f'datasets contains: {len(df)} windows, {len(normal_df)} normal windows, '
+              f'{len(anomaly_df)} anomaly windows')
+        print(f'Trianing dataset contains: {len(train_df)} windows')
+        print(f'Testing dataset contains: {len(test_df)} windows, '
+              f'{len(test_df.loc[test_df["Label"] == 0])} normal windows ,{len(anomaly_df)} anomaly windows')
+
+        return train_df, test_df
+
+
+    elif dataset_name == 'HDFS':
+        hdfs_df = pd.read_csv(dir + '/datasets/HDFS.BLK.csv', index_col=0, dtype={'BlockId': str, 'Label':int})
         hdfs_df.EventSequence = hdfs_df.EventSequence.apply(literal_eval)
         normal_df = hdfs_df[hdfs_df['Label'] == 0]
         normal_df = normal_df.sample(frac=1, random_state=seed).reset_index(drop=True)

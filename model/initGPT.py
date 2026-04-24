@@ -32,8 +32,8 @@ class InitGPT(nn.Module):
         else:
             self.top_k = min(int((len(self.vocab)-5)*0.95), options['top_k'])
         self._init_training()
-       	sample_df = self.test_df.groupby('Label', group_keys=False).head(500)
-       	self._predict_topk(sample_df['EventSequence'].tolist(), sample_df['Label'].tolist())
+        sample_df = self.test_df.groupby('Label', group_keys=False).head(500)
+        self._predict_topk(sample_df['EventSequence'].tolist(), sample_df['Label'].tolist())
 
     def _build_vocab(self):
         # Build vocab
