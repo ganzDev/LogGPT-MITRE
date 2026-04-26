@@ -21,73 +21,125 @@ def set_seed(seed = 42):
     torch.cuda.manual_seed(seed)
     torch.backends.cudnn.deterministic = True
 
+LINUX_SEMANTIC_EVENT_MAP = {
+    "961489c4": "DEVICE_NODE_CREATE",
+    "09789b2b": "SESSION_OPEN",
+    "27624832": "SESSION_CLOSE",
+    "32a4064e": "DNS_LISTEN_IPV4",
+    "b780997e": "UNKNOWN_USER",
+    "cb0e911a": "AUTH_FAIL",
+    "d38ec4eb": "FTP_CONNECTION",
+    "980efd56": "TTY_PEER_DIED",
+    "6aadc992": "FTP_CONNECTION",
+    "3d002f62": "DEVICE_NODE_REMOVE",
+    "c148af6a": "TTY_TIMEOUT",
+    "593496d9": "DNS_STOP_LISTEN",
+    "ee259d46": "FTP_PEER_DISCONNECT",
+    "426520a8": "UNKNOWN_USER_TIMEOUT",
+    "f2487cd5": "SYSTEM_INFO",
+    "dea5ca56": "KERBEROS_AUTH_FAIL",
+    "99132f5d": "KERNEL_TIME_SYNC",
+    "5dc1b8dd": "EXPLOIT_PAYLOAD_ATTEMPT",
+}
 
+def linux_semantic_token(row):
+    event_id = str(row["EventId"])
+    content = str(row["Content"]).lower()
+    component = str(row["Component"]).lower()
+
+    # Special contextual handling
+    if event_id == "8691a3d6":
+        if "user=root" in content:
+            return "ROOT_AUTH_FAIL"
+        return "AUTH_FAIL_USER"
+
+    # Exact EventId map
+    if event_id in LINUX_SEMANTIC_EVENT_MAP:
+        return LINUX_SEMANTIC_EVENT_MAP[event_id]
+
+    # Fallback text rules
+    if "sudo" in component:
+        return "SUDO_EVENT"
+
+    if "crond" in component:
+        return "CRON_EVENT"
+
+    if "sshd" in component:
+        return "SSHD_EVENT"
+
+    return f"EVENT_{event_id}"
+
+#
 
 def linux_rule_based_labeling(df):
     """
-    Add weak anomaly labels for Linux logs.
-    Label = 1 means suspicious/anomalous.
-    Label = 0 means normal/benign.
+    Light row-level labels only.
+    Most Linux attack behavior should be labeled later at the window level.
     """
     df = df.copy()
     df['Label'] = 0
 
     content = df['Content'].astype(str).str.lower()
-    component = df['Component'].astype(str).str.lower()
 
-    suspicious_patterns = [
-        'authentication failure',
-        'user unknown',
-        'invalid user',
-        'failed password',
+    strong_single_line_patterns = [
         'maximum authentication attempts exceeded',
         'not in sudoers',
         'authentication token manipulation error',
         'connection closed by invalid user',
     ]
 
-    for pattern in suspicious_patterns:
+    for pattern in strong_single_line_patterns:
         df.loc[content.str.contains(pattern, regex=False, na=False), 'Label'] = 1
 
-    # Root-targeted failures
-    root_auth_fail = (
-        content.str.contains('authentication failure', regex=False, na=False)
-        & content.str.contains('user=root', regex=False, na=False)
-    )
-    df.loc[root_auth_fail, 'Label'] = 1
-
-    # FTP burst behavior: many ftpd connections from same IP in short time
-    df['SourceIP'] = content.str.extract(
-        r'connection from ((?:\d{1,3}\.){3}\d{1,3})',
-        expand=False
-    )
-
-    df['datatime_tmp'] = pd.to_datetime(
-        df['Month'].astype(str) + ' ' + df['Day'].astype(str) + ' ' + df['Time'].astype(str),
-        format='%b %d %H:%M:%S',
-        errors='coerce'
-    ).ffill()
-
-    ftpd_mask = component.str.contains('ftpd', regex=False, na=False) & df['SourceIP'].notna()
-
-    for ip, group in df[ftpd_mask].groupby('SourceIP'):
-        group = group.sort_values('datatime_tmp')
-
-        for idx, row in group.iterrows():
-            start = row['datatime_tmp']
-            end = start + pd.Timedelta(seconds=60)
-
-            burst = group[
-                (group['datatime_tmp'] >= start)
-                & (group['datatime_tmp'] <= end)
-            ]
-
-            if len(burst) >= 10:
-                df.loc[burst.index, 'Label'] = 1
-
-    df = df.drop(columns=['SourceIP', 'datatime_tmp'])
-
     return df
+
+def label_linux_window(tokens):
+    auth_fails = (
+        tokens.count("AUTH_FAIL")
+        + tokens.count("ROOT_AUTH_FAIL")
+        + tokens.count("AUTH_FAIL_USER")
+        + tokens.count("KERBEROS_AUTH_FAIL")
+    )
+    unknown_users = (
+        tokens.count("UNKNOWN_USER")
+        + tokens.count("UNKNOWN_USER_TIMEOUT")
+    )
+    ftp_connections = tokens.count("FTP_CONNECTION")
+    ftp_disconnects = tokens.count("FTP_PEER_DISCONNECT")
+
+    exploit_attempts = tokens.count("EXPLOIT_PAYLOAD_ATTEMPT")
+    dns_stop = tokens.count("DNS_STOP_LISTEN")
+
+    # Strong direct malicious indicator
+    if exploit_attempts >= 1:
+        return 1
+
+    # Auth abuse
+    if auth_fails >= 5:
+        return 1
+
+    if unknown_users >= 3:
+        return 1
+
+    if "ROOT_AUTH_FAIL" in tokens and auth_fails >= 2:
+        return 1
+
+    if auth_fails >= 2 and ("SESSION_OPEN" in tokens or "ROOT_SESSION_OPEN" in tokens):
+        return 1
+
+    # FTP burst behavior
+    if ftp_connections >= 10:
+        return 1
+
+    # Many disconnect/errors after burst
+    if ftp_connections >= 5 and ftp_disconnects >= 3:
+        return 1
+
+    # DNS service disruption
+    if dns_stop >= 2:
+        return 1
+
+    return 0
 
 def hdfs_blk_process(df, blk_label_dict):
     data_dict = defaultdict(list)
@@ -122,13 +174,13 @@ def sliding_window(df, options):
             errors='coerce'
         )
         df['datatime'] = df['datatime'].fillna(method='ffill')
+    token_col = "SemanticToken" if options["dataset_name"] == "Linux" and "SemanticToken" in df.columns else "EventId"
     df['timestamp'] = df['datatime'].values.astype(np.int64) // 10 ** 9
     df = df.sort_values('timestamp')
 
     df.set_index('timestamp', drop=False, inplace=True)
     start_time = df.timestamp.min()
     end_time = df.timestamp.max()
-
     new_data = []
     while start_time < end_time:
         df_window = df.loc[start_time:start_time+options["window_size"]]
@@ -136,20 +188,45 @@ def sliding_window(df, options):
             if len(df_window) > options['max_lens']:
                 start_time_inner = df_window.timestamp.min()
                 end_time_inner = df_window.timestamp.max()
+
                 while (end_time_inner - start_time_inner) > options['max_lens']:
                     df_window_inner = df_window.loc[start_time_inner:start_time_inner+options['max_lens']]
+
+                    # new_data.append([
+                    #     df_window_inner['Label'].values.tolist(),
+                    #     df_window_inner['Label'].max(),
+                    #     # df_window_inner['EventId'].values.tolist()
+                    #     df_window_inner[token_col].values.tolist()
+                    # ])
+
+                    tokens = df_window_inner[token_col].values.tolist()
+                    label_org = df_window_inner['Label'].values.tolist()
+                    label = label_linux_window(tokens) if options['dataset_name'] == 'Linux' else df_window_inner['Label'].max()
                     new_data.append([
-                        df_window_inner['Label'].values.tolist(),
-                        df_window_inner['Label'].max(),
-                        df_window_inner['EventId'].values.tolist()
+                        label_org,
+                        label,
+                        tokens
                     ])
+
                     start_time_inner += options['max_lens'] // 2
             else:
+                # new_data.append([
+                #     df_window['Label'].values.tolist(),
+                #     df_window['Label'].max(),
+                #     # df_window['EventId'].values.tolist()
+                #     df_window[token_col].values.tolist()
+                # ])
+
+
+                tokens = df_window[token_col].values.tolist()
+                label_org = df_window['Label'].values.tolist()
+                label = label_linux_window(tokens) if options['dataset_name'] == 'Linux' else df_window['Label'].max()
                 new_data.append([
-                    df_window['Label'].values.tolist(),
-                    df_window['Label'].max(),
-                    df_window['EventId'].values.tolist()
+                    label_org,
+                    label,
+                    tokens
                 ])
+
         start_time += options['step_size']
 
     print('there are %d instances (sliding windows) in this dataset\n' % len(new_data))
@@ -164,7 +241,8 @@ def preprocessing(preprocessing=True, dataset_name='HDFS', options=None):
             print("Preprocessing Linux dataset")
             df = pd.read_csv('./datasets/Linux.log_structured.csv', engine='c', na_filter=False, memory_map=True)
             df = linux_rule_based_labeling(df)
-
+            df["SemanticToken"] = df.apply(linux_semantic_token, axis=1)
+            print(df["SemanticToken"].value_counts().head(20))
             print(df['Label'].value_counts())
             print('There are %d instances in this dataset\n' % len(df))
 

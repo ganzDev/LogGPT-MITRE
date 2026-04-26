@@ -41,7 +41,10 @@ def get_args():
     logGPT_training: bool = True
     :return: parser
     '''
-
+    def str2bool(v):
+        if isinstance(v, bool):
+            return v
+        return v.lower() in ("yes", "true", "t", "1")
     parser = ArgumentParser()
     parser.add_argument('--dataset_name', default='HDFS', type=str,
                         help='The name of the dataset to be parsed (default: HDFS)')
@@ -49,21 +52,21 @@ def get_args():
                         help='The output directory of parsing results')
     parser.add_argument('--seed', default=7, type=int, help='random seed (default: 7)')
     parser.add_argument('--device', default='cpu', type=str, help='device (default: cpu)')
-    parser.add_argument('--download_datasets', default=False, type=bool, help='Download datasets (default: True)')
-    parser.add_argument('--preprocessing', default=False, type=bool, help='Preprocessing datasets (default: True)')
+    parser.add_argument('--download_datasets', default=False, type=str2bool, help='Download datasets (default: True)')
+    parser.add_argument('--preprocessing', default=False, type=str2bool, help='Preprocessing datasets (default: True)')
     parser.add_argument('--max_lens', default=512, type=int, help='Max length of sequence (default: 512)')
-    parser.add_argument('--sliding_window', default=False, type=bool, help='Sliding window (default: False)')
+    parser.add_argument('--sliding_window', default=False, type=str2bool, help='Sliding window (default: False)')
 
     #GPT2
     parser.add_argument('--train_samples', default=5000, type=int, help='Train samples (default: 5000)')
-    parser.add_argument('--building_vocab', default=False, type=bool, help='Building vocab (default: True)')
+    parser.add_argument('--building_vocab', default=False, type=str2bool, help='Building vocab (default: True)')
     parser.add_argument('--init_lr', default=1e-4, type=float, help='Initial learning rate (default: 1e-4)')
     parser.add_argument('--init_num_epochs', default=100, type=int, help='Initial number of epochs (default: 100)')
     parser.add_argument('--init_batch_size', default=16, type=int, help='Initial batch size (default: 16)')
-    parser.add_argument('--init_logGPT', default=True, type=bool, help='Initial logGPT (default: True)')
+    parser.add_argument('--init_logGPT', default=True, type=str2bool, help='Initial logGPT (default: True)')
     parser.add_argument('--num_return_sequences', default=20, type=int, help='Number of generated sequences (default: 20)')
     parser.add_argument('--top_k', default=7, type=int, help='Top k (default: 7)')
-    parser.add_argument('--tqdm', default=False, type=bool, help='Tqdm (default: False)')
+    parser.add_argument('--tqdm', default=False, type=str2bool, help='Tqdm (default: False)')
     parser.add_argument('--n_layers', default=6, type=int, help='Number of layers (default: 6)')
     parser.add_argument('--n_heads', default=6, type=int, help='Number of heads (default: 6)')
     parser.add_argument('--n_embd', default=60, type=int, help='Number of embeddings (default: 60)')
@@ -71,6 +74,6 @@ def get_args():
     #LogGPT
     parser.add_argument('--logGPT_episode', default=20, type=int, help='LogGPT episode (default: 20)')
     parser.add_argument('--logGPT_lr', default=1e-6, type=float, help='LogGPT learning rate (default: 1e-6)')
-    parser.add_argument('--save_memory', default=False, type=bool, help='Save memory (default: False)')
-    parser.add_argument('--logGPT_training', default=True, type=bool, help='LogGPT training (default: True)')
+    parser.add_argument('--save_memory', default=False, type=str2bool, help='Save memory (default: False)')
+    parser.add_argument('--logGPT_training', default=True, type=str2bool, help='LogGPT training (default: True)')
     return parser
