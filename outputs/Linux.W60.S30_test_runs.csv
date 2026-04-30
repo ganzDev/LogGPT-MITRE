@@ -1,0 +1,2 @@
+dataset,train_samples,top_k,normal_precision,normal_recall,normal_f1,normal_support,anomaly_precision,anomaly_recall,anomaly_f1,anomaly_support,accuracy,macro_precision,macro_recall,macro_f1,weighted_precision,weighted_recall,weighted_f1,TN,FP,FN,TP,AUC_ROC,AUC_PR
+Linux,500,3,0.7549591598599766,0.80875,0.7809293904646952,800,0.7940780619111709,0.7375,0.7647440051847052,800,0.773125,0.7745186108855737,0.7731250000000001,0.7728366978247002,0.7745186108855738,0.773125,0.7728366978247001,647,153,210,590,0.773125,0.7168825706594886

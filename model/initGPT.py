@@ -3,6 +3,8 @@
 #SPDX-License-Identifier: CC-BY-NC-4.0
 #
 
+import os
+
 from utils import vocab, logdataset
 from torch.utils.data import DataLoader
 import torch.nn as nn
@@ -11,7 +13,7 @@ from tqdm import tqdm
 from transformers import GPT2Config, GPT2LMHeadModel
 import math
 from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score, average_precision_score
-
+import main
 
 class InitGPT(nn.Module):
     def __init__(self, options, train_df, test_df, topk=None):
@@ -127,7 +129,7 @@ class InitGPT(nn.Module):
             self.model.eval()
             print('LogGPT loaded.')
 
-    def _predict_topk(self, seqs, label, ratio=None):
+    def _predict_topk(self, seqs, label, ratio=None, save_csv=False):
         self.model.eval()
         y_true = []
         y_pred = []
@@ -161,11 +163,42 @@ class InitGPT(nn.Module):
                 y_pred.append(1)
             else:
                 y_pred.append(0)
-        print('Topk results:')
+        # print('Topk results:')
+        # print(classification_report(y_true=y_true, y_pred=y_pred, digits=5))
+        # print(confusion_matrix(y_true=y_true, y_pred=y_pred))
+        # print(f'AUC ROC: {roc_auc_score(y_true=y_true, y_score=y_pred)}')
+        # print(F'AUC PR: {average_precision_score(y_true=y_true, y_score=y_pred)}')
+        report = classification_report(
+            y_true=y_true,
+            y_pred=y_pred,
+            digits=5,
+            output_dict=True
+        )
+
+        cm = confusion_matrix(y_true=y_true, y_pred=y_pred)
+        auc_roc = roc_auc_score(y_true=y_true, y_score=y_pred)
+        auc_pr = average_precision_score(y_true=y_true, y_score=y_pred)
+
+        print("Topk results:")
         print(classification_report(y_true=y_true, y_pred=y_pred, digits=5))
-        print(confusion_matrix(y_true=y_true, y_pred=y_pred))
-        print(f'AUC ROC: {roc_auc_score(y_true=y_true, y_score=y_pred)}')
-        print(F'AUC PR: {average_precision_score(y_true=y_true, y_score=y_pred)}')
+        print(cm)
+        print(f"AUC ROC: {auc_roc}")
+        print(f"AUC PR: {auc_pr}")
+
+        if save_csv:
+            from utils.metrics_logger import log_test_metrics
+
+            log_test_metrics(
+                report=report,
+                cm=cm,
+                auc_roc=auc_roc,
+                auc_pr=auc_pr,
+                dataset_name=self.dataset_name,
+                options=self.options,
+                window_size=self.options["window_size"],
+                step_size=self.options["step_size"]
+            )
+
 
     def predict(self, seqs, label, cut=None, result=0):
         self.model.eval()
@@ -206,8 +239,10 @@ class InitGPT(nn.Module):
                 y_pred.append(1)
         print('Generated results:')
         if result == 1:
+
             print(classification_report(y_true=label, y_pred=y_pred, digits=5))
             print(confusion_matrix(y_true=label, y_pred=y_pred))
             print(f'AUC ROC: {roc_auc_score(y_true=label, y_score=y_pred)}')
             print(F'AUC PR: {average_precision_score(y_true=label, y_score=y_pred)}')
+
         return y_pred, y_score

@@ -10,6 +10,7 @@ from tqdm import tqdm
 import copy
 import math
 from torch.distributions import Categorical
+from utils.metrics_logger import log_test_metrics
 
 
 class LogGPT(object):
@@ -44,7 +45,6 @@ class LogGPT(object):
             self.test()
         else:
             self.test()
-
     def _load_vocab(self):
         print('Loading vocab...')
         self.vocab = vocab.WordVocab.load_vocab(self.vocab_path)
@@ -136,7 +136,7 @@ class LogGPT(object):
         self.FT_GPT._predict_topk(self.test_df['EventSequence'].tolist()[::1], self.test_df['Label'].tolist()[::1])
 
     def test(self):
-        self.FT_GPT._predict_topk(self.test_df['EventSequence'].tolist()[::1], self.test_df['Label'].tolist()[::1])
+        self.FT_GPT._predict_topk(self.test_df['EventSequence'].tolist()[::1], self.test_df['Label'].tolist()[::1], save_csv=True)
 
     def valid_step(self, seq):
         # 1. generate samples by FT_GPT
