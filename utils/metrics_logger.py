@@ -14,6 +14,7 @@ def log_test_metrics(report, cm, auc_roc, auc_pr, dataset_name, options, window_
         "dataset": dataset_name,
         "train_samples": options["train_samples"],
         "top_k": options["top_k"],
+        "seed": options["seed"],
 
         "normal_precision": report["0"]["precision"],
         "normal_recall": report["0"]["recall"],

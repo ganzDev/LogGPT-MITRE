@@ -13,6 +13,7 @@ from tqdm import tqdm
 from transformers import GPT2Config, GPT2LMHeadModel
 import math
 from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score, average_precision_score
+from utils.mitre_mapping import MitreMapper, export_mitre_alerts
 import main
 
 class InitGPT(nn.Module):
@@ -34,8 +35,9 @@ class InitGPT(nn.Module):
         else:
             self.top_k = min(int((len(self.vocab)-5)*0.95), options['top_k'])
         self._init_training()
-        sample_df = self.test_df.groupby('Label', group_keys=False).head(500)
-        self._predict_topk(sample_df['EventSequence'].tolist(), sample_df['Label'].tolist())
+        # sample_df = self.test_df.groupby('Label', group_keys=False).head(500)
+        # self._predict_topk(sample_df['EventSequence'].tolist(), sample_df['Label'].tolist())
+        self._predict_topk(self.test_df['EventSequence'].tolist()[::1], self.test_df['Label'].tolist()[::1])
 
     def _build_vocab(self):
         # Build vocab
@@ -129,7 +131,7 @@ class InitGPT(nn.Module):
             self.model.eval()
             print('LogGPT loaded.')
 
-    def _predict_topk(self, seqs, label, ratio=None, save_csv=False):
+    def _predict_topk(self, seqs, label, ratio=None, save_csv=False, export_mitre=False):
         self.model.eval()
         y_true = []
         y_pred = []
@@ -198,6 +200,67 @@ class InitGPT(nn.Module):
                 window_size=self.options["window_size"],
                 step_size=self.options["step_size"]
             )
+        if self.options["dataset_name"] == "Linux" and export_mitre:
+            mapper = MitreMapper()
+            alerts = []
+
+            for i, pred in enumerate(y_pred):
+                if pred == 1:
+                    tokens = seqs[i]
+                    findings = mapper.map_linux_window(tokens)
+
+                    if findings:
+                        technique_ids = "; ".join([f.get("technique_id", "") for f in findings])
+                        technique_names = "; ".join([f.get("name", "") for f in findings])
+
+                        tactics = "; ".join(
+                            sorted(set(
+                                tactic
+                                for f in findings
+                                for tactic in f.get("tactics", [])
+                            ))
+                        )
+
+                        data_sources = "; ".join(
+                            sorted(set(
+                                ds
+                                for f in findings
+                                for ds in f.get("data_sources", [])
+                            ))
+                        )
+
+                        reasons = " | ".join([f.get("reason", "") for f in findings])
+                    else:
+                        technique_ids = "No MITRE Mapping"
+                        technique_names = "No MITRE Mapping"
+                        tactics = ""
+                        data_sources = ""
+                        reasons = "No ATT&CK-mappable semantic behavior found"
+
+                    if label[i] == 1:
+                        alert_type = "True Positive"
+                    else:
+                        alert_type = "False Positive"
+
+                    alerts.append({
+                        "Window ID": i,
+                        "True Label": label[i],
+                        "Predicted Label": pred,
+                        "Alert Type": alert_type,
+                        "Event Sequence": " ".join(tokens),
+                        "Technique IDs": technique_ids,
+                        "Technique Names": technique_names,
+                        "Tactics": tactics,
+                        "Data Sources": data_sources,
+                        "Reasons": reasons,
+                    })
+
+            output_path = "./outputs/Linux.W{}.S{}_mitre_alerts.csv".format(
+                self.options["window_size"],
+                self.options["step_size"]
+            )
+
+            export_mitre_alerts(alerts, output_path)
 
 
     def predict(self, seqs, label, cut=None, result=0):

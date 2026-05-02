@@ -136,7 +136,7 @@ class LogGPT(object):
         self.FT_GPT._predict_topk(self.test_df['EventSequence'].tolist()[::1], self.test_df['Label'].tolist()[::1])
 
     def test(self):
-        self.FT_GPT._predict_topk(self.test_df['EventSequence'].tolist()[::1], self.test_df['Label'].tolist()[::1], save_csv=True)
+        self.FT_GPT._predict_topk(self.test_df['EventSequence'].tolist()[::1], self.test_df['Label'].tolist()[::1], save_csv=True, export_mitre=True)
 
     def valid_step(self, seq):
         # 1. generate samples by FT_GPT
