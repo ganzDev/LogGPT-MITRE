@@ -3,6 +3,7 @@
 #SPDX-License-Identifier: CC-BY-NC-4.0
 #
 
+from cProfile import label
 import os
 
 from utils import vocab, logdataset
@@ -13,7 +14,7 @@ from tqdm import tqdm
 from transformers import GPT2Config, GPT2LMHeadModel
 import math
 from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score, average_precision_score
-from utils.mitre_mapping import MitreMapper, export_mitre_alerts
+from utils.mitre_mapping import MitreMapper, export_mitre_alerts, append_mitre_summary
 import main
 
 class InitGPT(nn.Module):
@@ -261,6 +262,17 @@ class InitGPT(nn.Module):
             )
 
             export_mitre_alerts(alerts, output_path)
+            summary_path = "./outputs/Linux.W{}.S{}_mitre_summary.csv".format(
+            self.options["window_size"],
+            self.options["step_size"]
+            )
+
+            append_mitre_summary(
+                label,
+                y_pred,
+                alerts,
+                summary_path
+            )
 
 
     def predict(self, seqs, label, cut=None, result=0):

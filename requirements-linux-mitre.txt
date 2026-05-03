@@ -1,0 +1,6 @@
+# Additional dependencies for Linux MITRE ATT&CK mapping and experiment graphs.
+# Tested with Python 3.10.
+
+-r requirements.txt
+attackcti==0.6.4
+matplotlib

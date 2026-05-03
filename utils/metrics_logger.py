@@ -1,4 +1,5 @@
 import os
+import csv
 import pandas as pd
 from sklearn.metrics import (
     classification_report,
@@ -7,14 +8,32 @@ from sklearn.metrics import (
     average_precision_score
 )
 
+def _next_run_id(filename):
+    if not os.path.exists(filename):
+        return 1
+
+    with open(filename, "r", newline="") as f:
+        rows = list(csv.reader(f))
+
+    if len(rows) <= 1:
+        return 1
+
+    return len(rows)
 
 def log_test_metrics(report, cm, auc_roc, auc_pr, dataset_name, options, window_size, step_size):
 
+    os.makedirs("outputs", exist_ok=True)
+    filename = f"outputs/{dataset_name}.W{window_size}.S{step_size}_test_runs.csv"
+
     row = {
+        "run_id": _next_run_id(filename),
+
         "dataset": dataset_name,
         "train_samples": options["train_samples"],
         "top_k": options["top_k"],
         "seed": options["seed"],
+        "epochs": options["init_num_epochs"],
+        "episodes": options["logGPT_episode"],
 
         "normal_precision": report["0"]["precision"],
         "normal_recall": report["0"]["recall"],
@@ -45,9 +64,6 @@ def log_test_metrics(report, cm, auc_roc, auc_pr, dataset_name, options, window_
         "AUC_PR": auc_pr
     }
 
-    os.makedirs("outputs", exist_ok=True)
-
-    filename = f"outputs/{dataset_name}.W{window_size}.S{step_size}_test_runs.csv"
 
     df = pd.DataFrame([row])
     df.to_csv(

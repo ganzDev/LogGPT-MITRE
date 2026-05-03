@@ -4,7 +4,7 @@ import logging
 import pandas as pd
 import csv
 import os
-
+from collections import Counter
 
 def export_mitre_alerts(alerts, output_path):
     columns = [
@@ -32,6 +32,114 @@ def export_mitre_alerts(alerts, output_path):
             writer.writerow(alert)
 
     print(f"Exported MITRE alerts to {output_path}")
+
+
+MITRE_SUMMARY_COLUMNS = [
+    "Run ID",
+    "True Positives",
+    "False Positives",
+    "Total Predicted Anomaly Alerts",
+    "MITRE-Mapped Alerts",
+    "No MITRE Mapping Alerts",
+    "Technique Counts",
+    "Tactic Counts",
+]
+
+
+def _next_run_id(path):
+    if not os.path.exists(path):
+        return 1
+
+    with open(path, "r", newline="") as f:
+        rows = list(csv.reader(f))
+
+    if len(rows) <= 1:
+        return 1
+
+    return len(rows)
+
+
+def _format_counter(counter):
+    if not counter:
+        return ""
+
+    return "; ".join(
+        f"{key} ({count})"
+        for key, count in sorted(counter.items())
+    )
+
+
+def append_mitre_summary(label, y_pred, alerts, output_path):
+    label = list(label)
+    y_pred = list(y_pred)
+
+    true_positives = sum(
+        1 for true, pred in zip(label, y_pred)
+        if true == 1 and pred == 1
+    )
+
+    false_positives = sum(
+        1 for true, pred in zip(label, y_pred)
+        if true == 0 and pred == 1
+    )
+
+    total_predicted_alerts = sum(
+        1 for pred in y_pred
+        if pred == 1
+    )
+
+    technique_counter = Counter()
+    tactic_counter = Counter()
+
+    mitre_mapped = 0
+    mitre_unmapped = 0
+
+    for alert in alerts:
+        technique_ids = str(alert.get("Technique IDs", "")).strip()
+        tactics = str(alert.get("Tactics", "")).strip()
+
+        if technique_ids and technique_ids != "No MITRE Mapping":
+            mitre_mapped += 1
+
+            for technique_id in technique_ids.split(";"):
+                technique_id = technique_id.strip()
+                if technique_id:
+                    technique_counter[technique_id] += 1
+        else:
+            mitre_unmapped += 1
+
+        if tactics:
+            for tactic in tactics.split(";"):
+                tactic = tactic.strip()
+                if tactic:
+                    tactic_counter[tactic] += 1
+
+    output_dir = os.path.dirname(output_path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+
+    file_exists = os.path.exists(output_path)
+
+    row = {
+        "Run ID": _next_run_id(output_path),
+        "True Positives": true_positives,
+        "False Positives": false_positives,
+        "Total Predicted Anomaly Alerts": total_predicted_alerts,
+        "MITRE-Mapped Alerts": mitre_mapped,
+        "No MITRE Mapping Alerts": mitre_unmapped,
+        "Technique Counts": _format_counter(technique_counter),
+        "Tactic Counts": _format_counter(tactic_counter),
+    }
+
+    with open(output_path, "a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=MITRE_SUMMARY_COLUMNS)
+
+        if not file_exists:
+            writer.writeheader()
+
+        writer.writerow(row)
+
+    print(f"Appended MITRE summary to {output_path}")
 
 
 
