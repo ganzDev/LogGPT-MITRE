@@ -19,6 +19,7 @@ def get_args():
     sliding_window: bool = True
     window_size: int = 60
     step_size: int = 30
+    use_semantic_tokens: bool = True
 
     --------------------------------
     GPT2 args:
@@ -61,6 +62,7 @@ def get_args():
     parser.add_argument('--sliding_window', default=True, type=str2bool, help='Sliding window (default: True)')
     parser.add_argument('--window_size', default=60, type=int, help='Window size in second (default: 60)')
     parser.add_argument('--step_size', default=30, type=int, help='Window step in second (default: 30)')
+    parser.add_argument('--use_semantic_tokens', default=True, type=str2bool, help='Use semantic tokens (default: True)')
 
 
     #GPT2

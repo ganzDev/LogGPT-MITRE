@@ -201,7 +201,7 @@ class InitGPT(nn.Module):
                 window_size=self.options["window_size"],
                 step_size=self.options["step_size"]
             )
-        if self.options["dataset_name"] == "Linux" and export_mitre:
+        if self.options["dataset_name"] == "Linux" and export_mitre and self.options.get("use_semantic_tokens", True):
             mapper = MitreMapper()
             alerts = []
 

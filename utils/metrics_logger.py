@@ -29,6 +29,7 @@ def log_test_metrics(report, cm, auc_roc, auc_pr, dataset_name, options, window_
         "run_id": _next_run_id(filename),
 
         "dataset": dataset_name,
+        "model_version": "semantic" if options['use_semantic_tokens'] else "eventid_baseline",
         "train_samples": options["train_samples"],
         "top_k": options["top_k"],
         "seed": options["seed"],

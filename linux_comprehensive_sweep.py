@@ -69,6 +69,8 @@ def build_command(top_k: int, train_samples: int, seed: int) -> list[str]:
         str(train_samples),
         "--seed",
         str(seed),
+        "--use_semantic_tokens",
+        str_bool(False)
     ]
 
 

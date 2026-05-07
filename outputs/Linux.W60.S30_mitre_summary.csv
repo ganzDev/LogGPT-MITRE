@@ -55,3 +55,5 @@ Run ID,True Positives,False Positives,Total Predicted Anomaly Alerts,MITRE-Mappe
 54,17,77,94,26,68,T1078 (12); T1110 (19); T1133 (7),credential-access (19); defense-evasion (12); initial-access (19); persistence (19); privilege-escalation (12)
 55,800,382,1182,861,321,T1078 (346); T1110 (613); T1133 (239); T1190 (9),credential-access (613); defense-evasion (346); initial-access (594); persistence (585); privilege-escalation (346)
 56,800,674,1474,901,573,T1078 (347); T1110 (645); T1133 (248); T1190 (9),credential-access (645); defense-evasion (347); initial-access (604); persistence (595); privilege-escalation (347)
+57,800,228,1028,892,136,T1078 (348); T1110 (640); T1133 (244); T1190 (9),credential-access (640); defense-evasion (348); initial-access (601); persistence (592); privilege-escalation (348)
+58,800,228,1028,892,136,T1078 (348); T1110 (640); T1133 (244); T1190 (9),credential-access (640); defense-evasion (348); initial-access (601); persistence (592); privilege-escalation (348)

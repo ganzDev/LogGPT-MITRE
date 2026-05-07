@@ -174,7 +174,15 @@ def sliding_window(df, options):
             errors='coerce'
         )
         df['datatime'] = df['datatime'].fillna(method='ffill')
-    token_col = "SemanticToken" if options["dataset_name"] == "Linux" and "SemanticToken" in df.columns else "EventId"
+    # token_col = "SemanticToken" if options["dataset_name"] == "Linux" and "SemanticToken" in df.columns else "EventId"
+    if (
+    options["dataset_name"] == "Linux"
+    and options.get("use_semantic_tokens", True)
+    and "SemanticToken" in df.columns
+    ):
+        token_col = "SemanticToken"
+    else:
+        token_col = "EventId"
     df['timestamp'] = df['datatime'].values.astype(np.int64) // 10 ** 9
     df = df.sort_values('timestamp')
 
@@ -192,39 +200,53 @@ def sliding_window(df, options):
                 while (end_time_inner - start_time_inner) > options['max_lens']:
                     df_window_inner = df_window.loc[start_time_inner:start_time_inner+options['max_lens']]
 
+                    # tokens = df_window_inner[token_col].values.tolist()
+                    # label_org = df_window_inner['Label'].values.tolist()
+                    # label = label_linux_window(tokens) if options['dataset_name'] == 'Linux' else df_window_inner['Label'].max()
                     # new_data.append([
-                    #     df_window_inner['Label'].values.tolist(),
-                    #     df_window_inner['Label'].max(),
-                    #     # df_window_inner['EventId'].values.tolist()
-                    #     df_window_inner[token_col].values.tolist()
+                    #     label_org,
+                    #     label,
+                    #     tokens
                     # ])
-
-                    tokens = df_window_inner[token_col].values.tolist()
+                    sequence_tokens = df_window_inner[token_col].values.tolist()
                     label_org = df_window_inner['Label'].values.tolist()
-                    label = label_linux_window(tokens) if options['dataset_name'] == 'Linux' else df_window_inner['Label'].max()
+
+                    if options['dataset_name'] == 'Linux':
+                        label_tokens = df_window_inner['SemanticToken'].values.tolist()
+                        label = label_linux_window(label_tokens)
+                    else:
+                        label = df_window_inner['Label'].max()
+
                     new_data.append([
                         label_org,
                         label,
-                        tokens
+                        sequence_tokens
                     ])
 
                     start_time_inner += options['max_lens'] // 2
             else:
+
+                # tokens = df_window[token_col].values.tolist()
+                # label_org = df_window['Label'].values.tolist()
+                # label = label_linux_window(tokens) if options['dataset_name'] == 'Linux' else df_window['Label'].max()
                 # new_data.append([
-                #     df_window['Label'].values.tolist(),
-                #     df_window['Label'].max(),
-                #     # df_window['EventId'].values.tolist()
-                #     df_window[token_col].values.tolist()
+                #     label_org,
+                #     label,
+                #     tokens
                 # ])
-
-
-                tokens = df_window[token_col].values.tolist()
+                sequence_tokens = df_window[token_col].values.tolist()
                 label_org = df_window['Label'].values.tolist()
-                label = label_linux_window(tokens) if options['dataset_name'] == 'Linux' else df_window['Label'].max()
+
+                if options['dataset_name'] == 'Linux':
+                    label_tokens = df_window['SemanticToken'].values.tolist()
+                    label = label_linux_window(label_tokens)
+                else:
+                    label = df_window['Label'].max()
+
                 new_data.append([
                     label_org,
                     label,
-                    tokens
+                    sequence_tokens
                 ])
 
         start_time += options['step_size']
@@ -242,15 +264,24 @@ def preprocessing(preprocessing=True, dataset_name='HDFS', options=None):
             df = pd.read_csv('./datasets/Linux.log_structured.csv', engine='c', na_filter=False, memory_map=True)
             df = linux_rule_based_labeling(df)
             df["SemanticToken"] = df.apply(linux_semantic_token, axis=1)
-            print(df["SemanticToken"].value_counts().head(20))
+            print("use_semantic_tokens:", options.get("use_semantic_tokens", True))
+
+            if options.get("use_semantic_tokens", True):
+                print(df["SemanticToken"].value_counts().head(20))
+            else:
+                print(df["EventId"].value_counts().head(20))
             print(df['Label'].value_counts())
             print('There are %d instances in this dataset\n' % len(df))
 
             new_df = sliding_window(df, options)
-            new_df.to_csv('./datasets/Linux.W{}.S{}.csv'.format(
-                options['window_size'],
-                options['step_size']
-            ))
+            # new_df.to_csv('./datasets/Linux.W{}.S{}.csv'.format(
+            #     options['window_size'],
+            #     options['step_size']
+            # ))
+
+            suffix = "semantic" if options.get("use_semantic_tokens", True) else "eventid"
+
+            new_df.to_csv('./datasets/Linux.W{}.S{}.{}.csv'.format(options['window_size'], options['step_size'], suffix))
 
             del new_df
 
@@ -312,8 +343,9 @@ def preprocessing(preprocessing=True, dataset_name='HDFS', options=None):
 
 def train_test_split(dataset_name='HDFS', train_samples=5000, seed=42, options=None, dir='.'):
     if dataset_name == 'Linux':
+        suffix = "semantic" if options.get("use_semantic_tokens", True) else "eventid"
         df = pd.read_csv(
-            dir + '/datasets/Linux.W{}.S{}.csv'.format(options['window_size'], options['step_size']),
+            dir + '/datasets/Linux.W{}.S{}.{}.csv'.format(options['window_size'], options['step_size'], suffix),
             index_col=0,
             dtype={'Label': int}
         )
